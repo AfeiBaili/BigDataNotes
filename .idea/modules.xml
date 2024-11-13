@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/BigDataNotes.iml" filepath="$PROJECT_DIR$/BigDataNotes.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Spark.iml" filepath="$PROJECT_DIR$/Spark.iml" />
     </modules>
   </component>
 </project>

@@ -936,3 +936,38 @@ esac
 ```
 
 走到这里就是配置成功了可以用 IDEA BigData 插件来尝试连接
+
+## Flume环境搭建
+
+使用`wget https://dlcdn.apache.org/flume/1.11.0/apache-flume-1.11.0-bin.tar.gz `命令来获取Flume
+
+获取之后进行解压`tar -zxvf apache-flume-1.11.0-bin.tar.gz -C /opt/module/`
+
+通常运行flume都需要编写一个特定的配置文件用来运行时指定这个配置文件,下面是一个基于Socket数据源的文件编写
+
+```
+# 第一部分 声明变量,a1指的是agent在编写运行命令是传入a1
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# 第二部分 指定输入源
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = localhost
+a1.sources.r1.port = 33393
+
+# 第三部分 指定输出源
+a1.sinks.k1.type = logger
+
+# 第四部分 配置缓存
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# 第五部分 配置输入输出的缓存
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+```
+
+配置好之后使用`bin/flume-ng agent -c conf -f job/net-flume-logger.conf -n a1`命令进行启动,
+再启动nc使用`nc localhost 33393`命令启动
