@@ -971,3 +971,55 @@ a1.sinks.k1.channel = c1
 
 配置好之后使用`bin/flume-ng agent -c conf -f job/net-flume-logger.conf -n a1`命令进行启动,
 再启动nc使用`nc localhost 33393`命令启动
+
+> 如果不配置conf目录下的log4j.properties配置**flume.root.logger=INFO,LOGFILE,console**
+> 会无法打印出控制台,只在日志中打印
+
+## HBase环境搭建
+
+可使用`wget https://dlcdn.apache.org/hbase/2.5.10/hbase-2.5.10-bin.tar.gz `命令来获取HBase
+
+获取完之后进行解压`sudo tar -zxvf hbase-2.5.10-bin.tar.gz -C /opt/module/`
+
+解压完之后配置hbase-env.sh,找到
+
+```
+# 将一下配置改成false 配置描述:是否使用hbase自带的zookeeper,我们给他改成自己的zookeeper
+export HBASE_MANAGES_ZK=false
+```
+
+修改conf下的hbase-site.xml文件
+
+```
+   <property>
+      <!--是否为集群模式-->
+      <name>hbase.cluster.distributed</name>
+      <value>true</value>
+   </property>
+   <property>
+      <!--zookeeper的节点地址-->
+      <name>hbase.zookeeper.quorum</name>
+      <value>master,slave1,slave2</value>
+   </property>
+   <property>
+      <!--配置主文件夹的位置-->
+      <name>hbase.rootdir</name>
+      <value>hdfs://master:8020/hbase</value>
+   </property>
+```
+
+配置**regionservers**文件,用来配置hbase的集群节点
+
+```
+master
+slave1
+slave2
+```
+
+配置以上信息后就可以分发hbase到其他节点了
+
+### 其他配置
+
+配置高可用
+
+在conf/下创建**backup-masters**文件,可以使用`echo slave1 > backup-masters`命令快速写入内容,再进行分发
