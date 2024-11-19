@@ -2,7 +2,7 @@
 
 # 环境搭建
 
-> 所有用到的软件都在当前笔记的**software**目录下
+> 部分用到的软件都在当前笔记的release的**software**包中
 
 ## Linux前提配置
 
@@ -1018,8 +1018,364 @@ slave2
 
 配置以上信息后就可以分发hbase到其他节点了
 
+> 如果运行时报错可以尝试在报错中添加以下配置
+
+```
+<property>
+   <name>hbase.wal.provider</name>
+   <value>filesystem</value>
+</property>
+```
+
 ### 其他配置
 
 配置高可用
 
 在conf/下创建**backup-masters**文件,可以使用`echo slave1 > backup-masters`命令快速写入内容,再进行分发
+
+# 语言学习
+
+# 框架学习
+
+## Hadoop
+
+## MySql
+
+## Hive
+
+## HBase
+
+## Flume
+
+## Kafka
+
+## Spark
+
+## Flink
+
+Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界数据流进行有状态计算
+
+### 窗口
+
+Flink主要处理无界数据流,数据源源不断,窗口的出现就是将源源不断的数据流切分成一块一块的数据,
+窗口包含两大类窗口一种是计数窗口(TimeWindow),另一种是时间窗口(CountWindow)
+
+> 假如数据就是一个源源不断的水龙头🚰,窗口就是水龙头底下的水桶🪣,接完一桶再来一桶
+
+Flink有多种窗口规则分别是**滚动窗口、滑动窗口、会话窗口、全局窗口**
+
+滚动窗口: 数据首尾相接,不包含重复数据
+滑动窗口: 数据有重叠,包含重复数据
+会话窗口: 不会重叠,长度不固定,只能在时间窗口(TimeWindow)中出现
+全局窗口: 窗口默认不会触发计算,需要自定义窗口触发器
+
+### 窗口API
+
+在窗口API中有两种窗口API一种是`windowAll()`一种是经过keyBy之后的`keyBy(...).window()`
+
+window: 数据根据keyBy分区运行,每个key都开一个窗口独立运行
+windowAll: 将传入进来的数据运行在一个分区上
+
+```java
+public static void main(String[] args) {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    //使用windowAll()
+    environment.fromCollection(strings).windowAll();
+}
+```
+
+下面是WindowAll API
+
+```java
+    public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+//        streamSource.windowAll(SlidingProcessingTimeWindows.of(Time.seconds(10), Time.seconds(2))); 基于时间的滑动窗口
+//        streamSource.windowAll(TumblingProcessingTimeWindows.of(Time.seconds(10))); 基于时间的滚动窗口
+//        streamSource.windowAll(ProcessingTimeSessionWindows.withGap(Time.seconds(10))); 基于时间的会话窗口
+
+//        streamSource.countWindowAll(2); 基于计数的滚动窗口
+//        streamSource.countWindowAll(2,1); 基于计数的滑动窗口
+
+    environment.execute();
+}
+```
+
+在转换windowApi中调用这些方法`reduce()`、`aggregate()`、`apply()`、`process()`**可转回DataStream**
+
+reduce方法
+
+```java
+public static void main(String[] args) throws Exception {
+    //创建执行环境
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    //模拟数据流
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    //获取DataSteam
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+    //使用计数窗口转换为WindowStream并将窗口大小设置为2
+    AllWindowedStream<String, GlobalWindow> countWindowAll = streamSource.countWindowAll(2);
+    //进行reduce操作
+    SingleOutputStreamOperator<String> reduce = countWindowAll.reduce(new ReduceFunction<String>() {
+        @Override
+        //value1、value2: 传进来的值 返回值: 返回一个String
+        public String reduce(String value1, String value2) throws Exception {
+            return Integer.parseInt(value1) + Integer.parseInt(value2) + "";
+        }
+    });
+    //打印输出
+    reduce.print();
+    //执行
+    environment.execute();
+}
+```
+
+> 在大部分场景中使用reduce就可以做到了,但是使用aggregate方法可以指定输出类型
+
+aggregate方法
+
+```java
+ public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+    AllWindowedStream<String, GlobalWindow> countWindowAll = streamSource.countWindowAll(5);
+    //使用aggregate方法第一个泛型是输入类型，第二个泛型是累加器类型，第三个泛型是输出类型
+    countWindowAll.aggregate(new AggregateFunction<String, Integer, Integer>() {
+        @Override
+        //创建累加器调用
+        public Integer createAccumulator() {
+            System.out.println("创建累加器");
+            return 0;
+        }
+
+        @Override
+        //传进来的值就会走这个方法
+        public Integer add(String value, Integer accumulator) {
+            System.out.println("相加");
+            return Integer.parseInt(value) + accumulator;
+        }
+
+        @Override
+        //返回结果时调用
+        public Integer getResult(Integer accumulator) {
+            System.out.println("返回结果");
+            return accumulator;
+        }
+
+        @Override
+        public Integer merge(Integer a, Integer b) {
+            System.out.println("只有会话底层才会用到");
+            return 0;
+        }
+    }).print();
+    environment.execute();
+}
+```
+
+全窗口函数
+
+如果我们的要求需要窗口的上下文中的一些信息,聚合方法是做不到的,就需要窗口函数
+
+```java
+ public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+    AllWindowedStream<String, GlobalWindow> countWindowAll = streamSource.countWindowAll(5);
+    //过时的窗口方法
+    countWindowAll.apply(new AllWindowFunction<String, Integer, GlobalWindow>() {
+        @Override
+        public void apply(GlobalWindow window, Iterable<String> values, Collector<Integer> out) throws Exception {
+            values.forEach(value -> out.collect(Integer.parseInt(value)));
+        }
+    }).print();
+    environment.execute();
+}
+```
+
+> 使用`process()`功能比apply更加齐全
+
+```java
+ public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+    AllWindowedStream<String, GlobalWindow> countWindowAll = streamSource.countWindowAll(5);
+    countWindowAll.process(new ProcessAllWindowFunction<String, String, GlobalWindow>() {
+        /**
+         * 如果是keyBy之后的window会有个key的形参
+         * @param context 窗口的上下文
+         * @param elements 数据的集合
+         * @param out 采集器对象
+         */
+        @Override
+        public void process(ProcessAllWindowFunction<String, String, GlobalWindow>.Context context, Iterable<String> elements, Collector<String> out) throws Exception {
+            int count = 0;
+            for (String element : elements) {
+                count += Integer.parseInt(element);
+            }
+            out.collect(count + ":包含这些数据=>" + elements);
+        }
+    }).print();
+    environment.execute();
+}
+```
+
+聚合函数占用内存小,但是拿不到上下文,使用全窗口函数虽然可以使用上下文,
+但是占用内存大,我们可以使用全窗口函数结合聚合函数来使用他们的优点
+
+```java
+public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<String> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i + "");
+    }
+    DataStreamSource<String> streamSource = environment.fromCollection(strings);
+    AllWindowedStream<String, GlobalWindow> countWindowAll = streamSource.countWindowAll(5);
+    //使用aggregate(new AggregateFunction(),new ProcessAllWindowFunction)来实现他们用于更强灵活的运算
+    countWindowAll.aggregate(new AggregateFunction<String, Integer, Integer>() {
+        @Override
+        public Integer createAccumulator() {
+            return 0;
+        }
+
+        @Override
+        public Integer add(String value, Integer accumulator) {
+            return 0;
+        }
+
+        @Override
+        public Integer getResult(Integer accumulator) {
+            return 0;
+        }
+
+        @Override
+        public Integer merge(Integer a, Integer b) {
+            return 0;
+        }
+    }, new ProcessAllWindowFunction<Integer, Integer, GlobalWindow>() {
+        @Override
+        public void process(ProcessAllWindowFunction<Integer, Integer, GlobalWindow>.Context context, Iterable<Integer> elements, Collector<Integer> out) throws Exception {
+
+        }
+    });
+    environment.execute();
+}
+```
+
+> 使用全窗口执行函数,进行聚合之后调用全窗口函数,所以导致只有一个元素,但是拿到了上下文
+
+### 水位线
+
+在数据流中有两个时间戳,分别是事件时间和处理时间,事件时间指的是数据的生产时间,
+而处理时间指的是数据的进行处理操作的时间
+
+水位线和时间语义是息息相关的,在窗口的处理过程中,我们可以基于数据的时间戳,自定义一个逻辑时钟
+逻辑时钟不会跟着时间推动,他是根据数据的时间进行推动
+
+在flink中用来衡量事件时间的标记,就被称为水位线(Watermark)
+
+每条数据并不都会生成水位线,而是每小段时间生成水位线,
+有序的状态下就像以下这样子的,水位线在有序的情况下逐渐增大
+
+> => |17 15 |14 13 12 |11 10 9 8 |7 =>
+
+在实际的过程中,数据接收可能会发生延迟,导致顺序接收混乱,这就是**乱序数据**,乱序数据的处理方案很简单,
+水位线只会前进不会后退,就像时间一样,假设以下每条数据都包含水位线,在插入水位线中判断是否比前面的水位线大,
+如果大再插入,否者就停止插入水位线直到比当前水位线大的水位线再插入
+
+> => 15 |17 13 |14 |12 10 |11 |9 |8 |7 =>
+
+在乱序和数据量大的情况下,也可以生成水位线,在生成水位线之前判断传进来的时间戳
+,找到最大的时间戳并生成水位线
+
+> => |=17 15 17 |=14 13 14 12 |=11 11 9 =>
+
+**迟到的数据**加乱序也可以处理,为了让窗口能够收集到正确的数据,我们也可以等待一段时间用来收集迟到的数据,
+比如减去两秒,等待两秒后再进行处理,假如数据走到了九秒,水位线查找的最大数据也是九秒,
+通过减去两秒那么水位线指向的就是七秒,等待九秒内没有收集到的数据等待两秒
+
+> => |=(17-2) 15 17 |=14-2 13 14 12 |=(11-2) 11 9 =>
+
+> 注意每个窗口会找到自己的数据,并不会减去两秒之后处理不属于这两秒的数据
+
+在DataStreamAPI中有一个生成水位线的方法`assignTimestampsAndWatermarks()`
+
+```java
+public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<Integer> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i);
+    }
+    DataStreamSource<Integer> streamSource = environment.fromCollection(strings);
+    //定义水位线
+    WatermarkStrategy<Integer> integerWatermarkStrategy = WatermarkStrategy
+            //单调递增水位线
+            .<Integer>forMonotonousTimestamps()
+            //创建时间戳分配器，从分配器中提取数据
+            .withTimestampAssigner(new SerializableTimestampAssigner<Integer>() {
+                @Override
+                public long extractTimestamp(Integer element, long recordTimestamp) {
+                    System.out.println("Element: " + element + ", Event Time: " + element);
+                    //返回事件时间
+                    return element * 1000L;
+                }
+            });
+    //配置水位线
+    streamSource.assignTimestampsAndWatermarks(integerWatermarkStrategy)
+            //使用水位线时必须要使用事件时间窗口
+            .windowAll(TumblingEventTimeWindows.of(Time.seconds(1)))
+            .reduce(Integer::sum)
+            .print();
+    environment.execute();
+}
+```
+
+乱序的水位线API
+
+```java
+public static void main(String[] args) throws Exception {
+    StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+    ArrayList<Integer> strings = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        strings.add(i);
+    }
+    DataStreamSource<Integer> streamSource = environment.fromCollection(strings);
+    //设置等待时间为两秒
+    WatermarkStrategy<Integer> integerWatermarkStrategy = WatermarkStrategy.<Integer>forBoundedOutOfOrderness(Duration.ofSeconds(2))
+            .withTimestampAssigner(new SerializableTimestampAssigner<Integer>() {
+                @Override
+                public long extractTimestamp(Integer element, long recordTimestamp) {
+                    return element * 1000L;
+                }
+            });
+    streamSource.assignTimestampsAndWatermarks(integerWatermarkStrategy)
+            .windowAll(TumblingEventTimeWindows.of(Time.seconds(5)))
+            .reduce(Integer::sum)
+            .print();
+    environment.execute();
+}
+```
